@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: bart2
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npx tsc && mkdir -p static && cd ../frontend && npm install && npm run build && cp -r dist/* ../backend/static/
+    startCommand: node dist/index.js
+    disk:
+      name: bart2-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_PATH
+        value: /var/data/bart2.db
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://bart2.onrender.com
+      - key: NODE_ENV
+        value: production

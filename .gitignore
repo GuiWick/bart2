@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build output
+backend/dist/
+backend/static/
+frontend/dist/
+
+# Environment & secrets
+.env
+backend/.env
+*.env
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
