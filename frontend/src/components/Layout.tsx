@@ -2,13 +2,14 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
   LayoutDashboard, PlusCircle, History, Settings,
-  Plug, Users, LogOut, FileSearch
+  Plug, Users, LogOut, BookOpen
 } from "lucide-react";
 
 const nav = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/review/new", icon: PlusCircle, label: "New Review" },
   { to: "/history", icon: History, label: "History" },
+  { to: "/guide", icon: BookOpen, label: "Guide" },
   { to: "/integrations", icon: Plug, label: "Integrations" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
@@ -28,8 +29,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <aside className="w-60 bg-near-dark flex flex-col">
         <div className="p-6 border-b border-white/10">
           <div className="flex items-center gap-2">
-            <FileSearch className="text-near-green" size={24} />
-            <span className="font-bold text-white text-lg">Bart2</span>
+            <span className="text-2xl leading-none">🤗</span>
+            <span className="font-bold text-white text-lg">Bartholomew</span>
           </div>
           <p className="text-xs text-zinc-500 mt-1">by NEAR Foundation</p>
         </div>

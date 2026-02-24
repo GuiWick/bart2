@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { FileSearch } from "lucide-react";
 
 export default function Login() {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -36,13 +35,13 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 bg-near-green rounded-2xl flex items-center justify-center mb-4">
-            <FileSearch className="text-near-dark" size={30} />
+            <span className="text-3xl leading-none">🤗</span>
           </div>
-          <h1 className="text-2xl font-bold text-white">Bart2</h1>
+          <h1 className="text-2xl font-bold text-white">Bartholomew</h1>
           <p className="text-zinc-400 mt-1 text-sm">
             {mode === "login"
               ? "Sign in to your account"
-              : "Use your @near.foundation email to register"}
+              : "Use your @near.foundation or @nearsp.com email to register"}
           </p>
         </div>
 
@@ -108,7 +107,7 @@ export default function Login() {
           <div className="mt-6 text-center text-sm text-zinc-500">
             {mode === "login" ? (
               <>
-                New to Bart2?{" "}
+                New to Bartholomew?{" "}
                 <button
                   onClick={() => setMode("register")}
                   className="text-near-green hover:underline font-medium"
