@@ -2,15 +2,20 @@ import { WebClient } from "@slack/web-api";
 
 export async function listChannels(botToken: string) {
   const client = new WebClient(botToken);
-  const result = await client.conversations.list({
-    types: "public_channel,private_channel",
-    limit: 200,
-  });
-  return (result.channels || []).map((ch) => ({
-    id: ch.id,
-    name: ch.name,
-    is_private: ch.is_private,
-  }));
+  const channels: { id: string | undefined; name: string | undefined; is_private: boolean | undefined }[] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await client.conversations.list({
+      types: "public_channel,private_channel",
+      limit: 200,
+      cursor,
+    });
+    for (const ch of result.channels || []) {
+      channels.push({ id: ch.id, name: ch.name, is_private: ch.is_private });
+    }
+    cursor = result.response_metadata?.next_cursor || undefined;
+  } while (cursor);
+  return channels;
 }
 
 export async function getChannelMessages(botToken: string, channelId: string, limit = 20) {
