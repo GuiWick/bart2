@@ -4,7 +4,7 @@ import { hashPassword, verifyPassword, createToken, requireAuth, requireAdmin, A
 
 const router = Router();
 
-const ALLOWED_DOMAIN = "near.foundation";
+const ALLOWED_DOMAINS = ["near.foundation", "nearsp.com"];
 
 router.post("/register", (req, res) => {
   const { email, password, full_name = "" } = req.body;
@@ -13,8 +13,8 @@ router.post("/register", (req, res) => {
     return;
   }
   const isFirst = (db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number }).c === 0;
-  if (!isFirst && !email.endsWith(`@${ALLOWED_DOMAIN}`)) {
-    res.status(403).json({ detail: `Self-registration is limited to @${ALLOWED_DOMAIN} addresses. Contact your admin for access.` });
+  if (!isFirst && !ALLOWED_DOMAINS.some(d => email.endsWith(`@${d}`))) {
+    res.status(403).json({ detail: `Self-registration is limited to @near.foundation and @nearsp.com addresses. Contact your admin for access.` });
     return;
   }
   const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
