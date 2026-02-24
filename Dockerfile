@@ -1,4 +1,5 @@
 FROM node:22-alpine
+# v3 — fix start path + db dir creation
 
 WORKDIR /app
 

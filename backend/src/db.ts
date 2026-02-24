@@ -1,6 +1,11 @@
 // @ts-ignore — node:sqlite types available in @types/node ≥22.5
 import { DatabaseSync } from "node:sqlite";
+import { mkdirSync } from "fs";
+import { dirname } from "path";
 import { config } from "./config";
+
+// Ensure the database directory exists (e.g. /tmp or /var/data)
+mkdirSync(dirname(config.databasePath), { recursive: true });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db: any = new DatabaseSync(config.databasePath);
