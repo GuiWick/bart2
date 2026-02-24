@@ -35,4 +35,6 @@ try {
 app.listen(config.port, () => {
   console.log(`\n🚀  Bart2 running at http://localhost:${config.port}`);
   console.log(`   API: http://localhost:${config.port}/api`);
+  console.log(`   ANTHROPIC_API_KEY set: ${!!process.env.ANTHROPIC_API_KEY} (length: ${process.env.ANTHROPIC_API_KEY?.length ?? 0})`);
+  console.log(`   DATABASE_PATH: ${process.env.DATABASE_PATH || '(not set, using default)'}`);
 });

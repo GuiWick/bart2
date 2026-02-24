@@ -131,7 +131,7 @@ export async function analyzeContent(
 
   const stream = client.messages.stream({
     model: "claude-opus-4-6",
-    max_tokens: 4096,
+    max_tokens: 16000,
     // @ts-ignore — adaptive thinking is supported but not yet in SDK type defs
     thinking: { type: "adaptive" },
     system: [
