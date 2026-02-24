@@ -9,10 +9,10 @@ COPY . .
 WORKDIR /app/backend
 RUN npm install && npx tsc && mkdir -p static
 
-# Build frontend (React/Vite) and copy into backend/static
+# Build frontend — Vite outputs directly to ../backend/static (see vite.config.ts)
 WORKDIR /app/frontend
-RUN npm install && npm run build && cp -r dist/* ../backend/static/
+RUN npm install && npm run build
 
-# Run from repo root so relative paths work
+# Run from repo root
 WORKDIR /app
 CMD ["node", "backend/dist/index.js"]
