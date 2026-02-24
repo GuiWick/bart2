@@ -24,12 +24,12 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Routes>
-                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/" element={<Guide />} />
+                    <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/review/new" element={<NewReview />} />
                     <Route path="/review/:id" element={<ReviewDetail />} />
                     <Route path="/history" element={<History />} />
                     <Route path="/settings" element={<Settings />} />
-                    <Route path="/guide" element={<Guide />} />
                     <Route path="/integrations" element={<Integrations />} />
                     <Route path="/admin" element={<Admin />} />
                     <Route path="*" element={<Navigate to="/" replace />} />

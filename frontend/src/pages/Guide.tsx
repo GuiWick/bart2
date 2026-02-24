@@ -14,8 +14,8 @@ export default function Guide() {
           <span>🤗</span> What is Bartholomew?
         </h2>
         <p className="text-zinc-600 text-sm leading-relaxed">
-          Bartholomew is an AI-powered marketing content reviewer built for NEAR Foundation and
-          NEAR Spatial. Its purpose is to help teams ensure that marketing copies, announcements,
+          Bartholomew is an AI-powered marketing content reviewer built for NEAR Foundation.
+          Its purpose is to help teams ensure that marketing copies, announcements,
           social media posts, and other communications are aligned with NEAR's brand guidelines
           and communications policy before they are published.
         </p>

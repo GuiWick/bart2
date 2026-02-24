@@ -6,10 +6,10 @@ import {
 } from "lucide-react";
 
 const nav = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/", icon: BookOpen, label: "Guide" },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/review/new", icon: PlusCircle, label: "New Review" },
   { to: "/history", icon: History, label: "History" },
-  { to: "/guide", icon: BookOpen, label: "Guide" },
   { to: "/integrations", icon: Plug, label: "Integrations" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];

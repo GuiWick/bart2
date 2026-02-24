@@ -79,7 +79,7 @@ export async function analyzeContent(
   brandGuidelines: string,
   jurisdiction = "general"
 ): Promise<Record<string, unknown>> {
-  const client = new Anthropic({ apiKey: config.anthropicApiKey });
+  const client = new Anthropic({ apiKey: config.anthropicApiKey || undefined });
 
   const guidelinesSection = brandGuidelines?.trim()
     ? `## Brand Guidelines\n\n${brandGuidelines.trim()}\n\nUse these as the primary reference for brand voice scoring.`
