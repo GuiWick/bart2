@@ -45,6 +45,7 @@ db.exec(`
     brand_score       REAL,
     brand_feedback    TEXT,
     compliance_flags  TEXT DEFAULT '[]',
+    risk_score        REAL,
     sentiment         TEXT,
     sentiment_score   REAL,
     sentiment_feedback TEXT,
@@ -53,6 +54,8 @@ db.exec(`
     summary           TEXT,
     status            TEXT DEFAULT 'pending',
     error_message     TEXT,
+    jurisdiction      TEXT DEFAULT 'general',
+    source_filename   TEXT,
     created_at        TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
