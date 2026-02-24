@@ -1,19 +1,19 @@
 FROM node:22-alpine
-# v3 — fix start path + db dir creation
 
 WORKDIR /app
 
-# Copy source
+# Install backend deps first (cached unless package.json changes)
+COPY backend/package*.json ./backend/
+RUN cd backend && npm install
+
+# Install frontend deps
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm install
+
+# Copy all source and build
 COPY . .
+RUN cd backend && npx tsc && mkdir -p static
+RUN cd frontend && npm run build
 
-# Build backend (TypeScript → JS)
-WORKDIR /app/backend
-RUN npm install && npx tsc && mkdir -p static
-
-# Build frontend — Vite outputs directly to ../backend/static (see vite.config.ts)
-WORKDIR /app/frontend
-RUN npm install && npm run build
-
-# Run from repo root
 WORKDIR /app
 CMD ["node", "backend/dist/index.js"]
