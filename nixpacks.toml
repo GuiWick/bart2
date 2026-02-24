@@ -1,0 +1,13 @@
+providers = ["node"]
+
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.build]
+cmds = [
+  "cd backend && npm install && npx tsc && mkdir -p static",
+  "cd frontend && npm install && npm run build && cp -r dist/* ../backend/static/"
+]
+
+[start]
+cmd = "node backend/dist/index.js"
