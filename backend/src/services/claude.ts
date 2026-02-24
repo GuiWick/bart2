@@ -1,5 +1,4 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { config } from "../config";
 
 const SYSTEM_TEMPLATE = `You are a senior marketing communications expert and brand compliance specialist.
 
@@ -43,18 +42,45 @@ const CONTENT_LABELS: Record<string, string> = {
 const JURISDICTION_GUIDANCE: Record<string, string> = {
   US: `## Jurisdiction: United States
 Apply these US regulatory frameworks in your compliance review:
-- **SEC**: Assess whether content implies an unregistered securities offering (Howey test for crypto tokens). Flag any guaranteed return claims or unregistered investment product promotions.
-- **CFTC**: Check for compliant treatment of crypto derivatives and spot commodity references.
-- **FTC**: Evaluate against deceptive advertising rules — no unsubstantiated performance claims, false scarcity, or undisclosed paid endorsements.
-- **FinCEN**: Note any AML/KYC obligation implications for services described.
-Flag: missing "not financial advice" disclaimers, unsubstantiated yield/APY claims, absence of risk disclosures, potential unregistered securities language.`,
+
+**SEC (Securities and Exchange Commission)**
+- Apply the Howey test: flag any language that could characterise a token or digital asset as an investment contract (expectation of profit from efforts of others).
+- Flag: promises or implications of returns, profit, appreciation, or passive income; language describing tokens as "investments"; absence of disclaimers clarifying the token is not a security.
+- Flag: offers or sales of tokens that may constitute an unregistered securities offering under the Securities Act of 1933.
+- Flag: statements that could be deemed a general solicitation for an unregistered offering.
+- Require: "This is not an offer or solicitation to buy or sell securities" where appropriate; "Not financial advice" disclaimers.
+
+**CFTC (Commodity Futures Trading Commission)**
+- Flag references to crypto derivatives, leveraged trading, or futures without appropriate regulatory context.
+- Flag unsubstantiated claims about commodity price performance.
+
+**FTC (Federal Trade Commission)**
+- Flag unsubstantiated performance claims, superlatives ("best", "guaranteed"), false scarcity, and undisclosed material connections or paid endorsements.
+- Require clear and conspicuous disclosures for any sponsored or incentivised content.
+
+**FinCEN**
+- Flag descriptions of services that may trigger AML/KYC obligations without acknowledging compliance requirements.
+
+Always flag: missing "not financial advice" disclaimers, unsubstantiated yield/APY/return claims, absence of risk disclosures, potential unregistered securities language, missing "past performance is not indicative of future results" where performance data is cited.`,
 
   UK: `## Jurisdiction: United Kingdom
 Apply these UK regulatory frameworks in your compliance review:
-- **FCA Financial Promotions Regime**: All crypto asset promotions must be approved by an FCA-authorised person; must be fair, clear and not misleading.
-- **FCA Crypto Promotions Rules (Oct 2023)**: Mandatory risk warning "Don't invest unless you're prepared to lose all the money you invest. This is a high-risk investment and you are unlikely to be protected if something goes wrong." must accompany crypto promotions.
-- **Consumer Duty**: Assess whether the content delivers good outcomes for retail customers and avoids foreseeable harm.
-Flag: missing mandatory FCA risk warnings, unapproved financial promotions, misleading performance claims, missing "capital at risk" statements, cooling-off period omissions.`,
+
+**FCA Financial Promotions Regime (s.21 FSMA 2000)**
+- Any communication that is a financial promotion must be communicated or approved by an FCA-authorised person. Flag content that promotes a financial product or service without evidence of FCA authorisation or approval.
+- Financial promotions must be fair, clear, and not misleading. Flag any imbalanced presentation of benefits without risks, omission of material information, or use of jargon that obscures meaning.
+- Flag: testimonials or past performance presented without "past performance is not a reliable indicator of future results" caveat; projections without basis; prominence of benefits over risks.
+
+**FCA Crypto Asset Financial Promotions Rules (PS23/6, effective October 2023)**
+- All qualifying crypto asset promotions targeting UK consumers must be approved by an FCA-authorised person or issued by a registered crypto firm.
+- Mandatory prescribed risk warning must appear prominently: "Don't invest unless you're prepared to lose all the money you invest. This is a high-risk investment and you are unlikely to be protected if something goes wrong. Take 2 minutes to learn more."
+- Cooling-off period: first-time investors must be given a 24-hour cooling-off period. Flag content that creates undue urgency or pressure to act immediately.
+- Flag: absence of mandatory risk warning; FOMO language ("don't miss out", "last chance", limited time offers); celebrity endorsements without proper disclosures; incentivised referrals without disclosure.
+
+**FCA Consumer Duty (PS22/9)**
+- Content must deliver good outcomes for retail customers. Flag anything that could exploit behavioural biases, create a false sense of urgency, or cause foreseeable harm to retail consumers.
+
+Always flag: missing mandatory FCA risk warnings, unapproved financial promotions, misleading performance claims, missing "capital at risk" statements, pressure-selling tactics, cooling-off period omissions.`,
 
   CH: `## Jurisdiction: Switzerland
 Apply these Swiss regulatory frameworks in your compliance review:
@@ -66,11 +92,24 @@ Flag: unregistered token/security offerings, missing FinSA risk disclosures, mis
 
   EU: `## Jurisdiction: European Union
 Apply these EU regulatory frameworks in your compliance review:
-- **MiCA (Markets in Crypto-Assets Regulation)**: Marketing communications for crypto-assets must be fair, clear, and not misleading. White paper disclosure requirements apply to token issuers. Flag any statements that could constitute non-compliant marketing under MiCA.
-- **MiFID II**: For financial instrument promotions, assess against MiFID II marketing communication standards including fair presentation of risks.
-- **ESMA Guidelines**: Check against ESMA guidelines on social media and influencer marketing for financial products.
-- **GDPR**: Note any data collection or privacy implications mentioned in the content.
-Flag: missing MiCA-required risk disclosures, misleading crypto-asset claims, non-compliant financial promotions, absent mandatory risk warnings per MiFID II.`,
+
+**MiCAR (Markets in Crypto-Assets Regulation — EU 2023/1114, fully applicable from December 2024)**
+- Marketing communications for crypto-assets must be fair, clear, and not misleading, and must be consistent with the crypto-asset white paper where one is required.
+- Required disclosures in marketing communications: (a) a statement that a white paper has been published and where to find it; (b) the statement "This crypto-asset is not covered by any investor protection scheme. There is no guarantee that the crypto-asset will retain its value."
+- Flag: marketing communications that are inconsistent with the white paper; promotional language not clearly identified as a marketing communication; omission of required risk statements; statements implying guaranteed returns or price appreciation.
+- Flag: promotions for asset-referenced tokens (ARTs) or e-money tokens (EMTs) that do not comply with the additional MiCAR requirements applicable to those categories.
+- Issuers and offerors must ensure marketing communications are clearly identifiable as such. Flag any content that blurs the line between editorial/informational content and promotional material.
+
+**MiFID II**
+- For financial instrument promotions, content must fairly present risks and benefits; past performance disclaimers required where performance data is used.
+
+**ESMA Guidelines on Social Media and Influencer Marketing**
+- Flag undisclosed paid promotions, influencer content without adequate risk warnings, and content that may constitute investment advice.
+
+**GDPR**
+- Note any data collection, tracking, or privacy implications mentioned in the content.
+
+Always flag: missing MiCAR-required risk disclosures, marketing communications not identified as such, misleading crypto-asset claims, absent mandatory risk warnings, content inconsistent with published white paper.`,
 };
 
 export async function analyzeContent(
@@ -79,7 +118,7 @@ export async function analyzeContent(
   brandGuidelines: string,
   jurisdiction = "general"
 ): Promise<Record<string, unknown>> {
-  const client = new Anthropic({ apiKey: config.anthropicApiKey || undefined });
+  const client = new Anthropic();
 
   const guidelinesSection = brandGuidelines?.trim()
     ? `## Brand Guidelines\n\n${brandGuidelines.trim()}\n\nUse these as the primary reference for brand voice scoring.`
