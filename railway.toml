@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+buildCommand = "cd backend && npm install && npx tsc && mkdir -p static && cd ../frontend && npm install && npm run build && cp -r dist/* ../backend/static/"
+
+[deploy]
+startCommand = "node backend/dist/index.js"
+healthcheckPath = "/api/auth/me"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
