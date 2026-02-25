@@ -17,7 +17,7 @@ function getConfig(platform: string) {
 // ── Slack ─────────────────────────────────────────────────────────────────────
 
 router.post("/slack/config", requireAdmin, (req, res) => {
-  const { bot_token, channel_ids = [], signing_secret, notification_channel_id } = req.body;
+  const { bot_token, channel_ids = [], signing_secret, notification_channel_id, legal_channel_id } = req.body;
   const existingRow = db.prepare("SELECT config FROM integration_configs WHERE platform = 'slack'").get() as { config: string } | undefined;
   const existingCfg: Record<string, unknown> = existingRow ? JSON.parse(existingRow.config) : {};
   const cfg: Record<string, unknown> = {
@@ -27,6 +27,7 @@ router.post("/slack/config", requireAdmin, (req, res) => {
   };
   if (signing_secret !== undefined) cfg.signing_secret = signing_secret;
   if (notification_channel_id !== undefined) cfg.notification_channel_id = notification_channel_id;
+  if (legal_channel_id !== undefined) cfg.legal_channel_id = legal_channel_id;
 
   const existingId = db.prepare("SELECT id FROM integration_configs WHERE platform = 'slack'").get();
   if (existingId) {

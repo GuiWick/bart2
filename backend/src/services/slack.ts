@@ -70,6 +70,72 @@ export async function postToResponseUrl(responseUrl: string, blocks: object[]): 
   });
 }
 
+export function formatLegalReviewRequest(review: ReviewSummary, webAppUrl = ""): object[] {
+  const flags = (review.compliance_flags || []) as { issue: string; severity: string }[];
+  const priorityFlags = (flags.filter(f => f.severity === "high").length > 0
+    ? flags.filter(f => f.severity === "high")
+    : flags
+  ).slice(0, 4);
+  const riskScore = (review.risk_score as number) ?? 0;
+
+  const blocks: object[] = [
+    {
+      type: "header",
+      text: { type: "plain_text", text: ":scales: Legal Review Requested", emoji: true },
+    },
+    {
+      type: "section",
+      fields: [
+        { type: "mrkdwn", text: `*Risk Score:* :rotating_light: *${riskScore}%*` },
+        { type: "mrkdwn", text: `*Rating:* ${review.overall_rating ?? "?"}` },
+        { type: "mrkdwn", text: `*Content Type:* ${review.content_type}` },
+        { type: "mrkdwn", text: `*Brand Score:* ${review.brand_score != null ? review.brand_score + "/100" : "–"}` },
+      ],
+    },
+  ];
+
+  if (priorityFlags.length > 0) {
+    const flagText = priorityFlags.map(f => `• [${f.severity.toUpperCase()}] ${f.issue}`).join("\n");
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: `*Compliance Issues Flagged:*\n${flagText}` },
+    });
+  }
+
+  blocks.push({
+    type: "section",
+    text: {
+      type: "mrkdwn",
+      text: "This content is *pending legal sign-off* before the marketing team can proceed. Please review and approve or reject in Bartholomew.",
+    },
+  });
+
+  if (webAppUrl && review.id) {
+    blocks.push({
+      type: "actions",
+      elements: [{
+        type: "button",
+        style: "primary",
+        text: { type: "plain_text", text: "Review in Bartholomew", emoji: false },
+        url: `${webAppUrl}/review/${review.id}`,
+      }],
+    });
+  }
+
+  return blocks;
+}
+
+export async function postLegalRequestToChannel(botToken: string, channelId: string, review: ReviewSummary, webAppUrl = ""): Promise<void> {
+  const client = new WebClient(botToken);
+  const blocks = formatLegalReviewRequest(review, webAppUrl);
+  await client.chat.postMessage({
+    channel: channelId,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    blocks: blocks as any,
+    text: `:scales: Legal review requested — Risk score ${(review.risk_score as number) ?? 0}% (Review #${review.id})`,
+  });
+}
+
 export async function postReviewToChannel(botToken: string, channelId: string, review: ReviewSummary, webAppUrl = ""): Promise<void> {
   const client = new WebClient(botToken);
   const blocks = formatReportForSlack(review, webAppUrl);

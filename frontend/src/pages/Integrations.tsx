@@ -14,6 +14,7 @@ export default function Integrations() {
   const [slackToken, setSlackToken] = useState("");
   const [slackSigningSecret, setSlackSigningSecret] = useState("");
   const [slackNotifChannel, setSlackNotifChannel] = useState("");
+  const [slackLegalChannel, setSlackLegalChannel] = useState("");
   const [slackChannels, setSlackChannels] = useState<SlackChannel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState("");
   const [slackFetchLimit, setSlackFetchLimit] = useState(10);
@@ -49,7 +50,8 @@ export default function Integrations() {
         slackToken,
         [],
         slackSigningSecret || undefined,
-        slackNotifChannel || undefined
+        slackNotifChannel || undefined,
+        slackLegalChannel || undefined
       );
       const channels = await api.integrations.slackChannels();
       setSlackChannels(channels);
@@ -70,7 +72,8 @@ export default function Integrations() {
         "",
         [],
         slackSigningSecret || undefined,
-        slackNotifChannel || undefined
+        slackNotifChannel || undefined,
+        slackLegalChannel || undefined
       );
       setSlackMsg("Settings saved.");
     } catch (err: unknown) {
@@ -262,7 +265,27 @@ export default function Integrations() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notification channel <span className="text-gray-400">(post reports here when web reviews complete)</span>
+                    Legal review channel <span className="text-gray-400">(notified when risk score &gt; 70 — requires sign-off)</span>
+                  </label>
+                  <select
+                    value={slackLegalChannel}
+                    onChange={(e) => setSlackLegalChannel(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  >
+                    <option value="">None</option>
+                    {slackChannels.map((ch) => (
+                      <option key={ch.id} value={ch.id}>
+                        #{ch.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    High-risk reviews are blocked from approval until a Bartholomew admin acts on them.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    General notification channel <span className="text-gray-400">(all completed reviews)</span>
                   </label>
                   <select
                     value={slackNotifChannel}

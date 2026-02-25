@@ -16,6 +16,10 @@ db.exec(`PRAGMA journal_mode=WAL;`);
 try { db.exec("ALTER TABLE reviews ADD COLUMN jurisdiction TEXT DEFAULT 'general'"); } catch {}
 try { db.exec("ALTER TABLE reviews ADD COLUMN source_filename TEXT"); } catch {}
 try { db.exec("ALTER TABLE reviews ADD COLUMN risk_score REAL"); } catch {}
+try { db.exec("ALTER TABLE reviews ADD COLUMN legal_status TEXT DEFAULT NULL"); } catch {}
+try { db.exec("ALTER TABLE reviews ADD COLUMN legal_reviewed_by INTEGER DEFAULT NULL"); } catch {}
+try { db.exec("ALTER TABLE reviews ADD COLUMN legal_reviewed_at TEXT DEFAULT NULL"); } catch {}
+try { db.exec("ALTER TABLE reviews ADD COLUMN legal_note TEXT DEFAULT NULL"); } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -108,6 +112,10 @@ export function rowToReview(row: Record<string, unknown>) {
     error_message: row.error_message,
     jurisdiction: row.jurisdiction || "general",
     source_filename: row.source_filename,
+    legal_status: row.legal_status || null,
+    legal_reviewed_by: row.legal_reviewed_by || null,
+    legal_reviewed_at: row.legal_reviewed_at || null,
+    legal_note: row.legal_note || null,
     created_at: row.created_at,
   };
 }

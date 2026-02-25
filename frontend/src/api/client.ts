@@ -73,6 +73,11 @@ export const api = {
       request<Review[]>(`/reviews/?skip=${skip}&limit=${limit}`),
     get: (id: number) => request<Review>(`/reviews/${id}`),
     delete: (id: number) => request<void>(`/reviews/${id}`, { method: "DELETE" }),
+    legalReview: (id: number, action: "approved" | "rejected", note?: string) =>
+      request<Review>(`/reviews/${id}/legal-review`, {
+        method: "PATCH",
+        body: JSON.stringify({ action, note }),
+      }),
   },
 
   dashboard: {
@@ -91,10 +96,10 @@ export const api = {
 
   integrations: {
     status: () => request<{ slack: boolean; notion: boolean }>("/integrations/status"),
-    saveSlack: (bot_token: string, channel_ids: string[], signing_secret?: string, notification_channel_id?: string) =>
+    saveSlack: (bot_token: string, channel_ids: string[], signing_secret?: string, notification_channel_id?: string, legal_channel_id?: string) =>
       request<{ status: string }>("/integrations/slack/config", {
         method: "POST",
-        body: JSON.stringify({ bot_token, channel_ids, signing_secret, notification_channel_id }),
+        body: JSON.stringify({ bot_token, channel_ids, signing_secret, notification_channel_id, legal_channel_id }),
       }),
     slackChannels: () => request<SlackChannel[]>("/integrations/slack/channels"),
     fetchSlack: (channel_id: string, limit = 20) =>
@@ -154,6 +159,10 @@ export interface Review {
   summary?: string;
   status: "pending" | "completed" | "error";
   error_message?: string;
+  legal_status?: "pending" | "approved" | "rejected" | null;
+  legal_reviewed_by?: number | null;
+  legal_reviewed_at?: string | null;
+  legal_note?: string | null;
   created_at: string;
   user?: User;
 }

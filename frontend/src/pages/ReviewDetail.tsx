@@ -1,16 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, Review } from "../api/client";
+import { useAuth } from "../contexts/AuthContext";
 import { ScoreBadge, RatingBadge, SentimentBadge, SeverityBadge } from "../components/ScoreBadge";
-import { AlertTriangle, CheckCircle, RefreshCw, Trash2, ChevronDown, ChevronUp, ShieldAlert, Download } from "lucide-react";
+import { AlertTriangle, CheckCircle, RefreshCw, Trash2, ChevronDown, ChevronUp, ShieldAlert, Download, Scale, XCircle } from "lucide-react";
 
 const LEGAL_RISK_THRESHOLD = 70;
 
 export default function ReviewDetail() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const [review, setReview] = useState<Review | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedFlags, setExpandedFlags] = useState<Set<number>>(new Set());
+  const [legalNote, setLegalNote] = useState("");
+  const [legalSubmitting, setLegalSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const fetchReview = useCallback(async () => {
@@ -29,6 +33,18 @@ export default function ReviewDetail() {
   }, [id]);
 
   useEffect(() => { fetchReview(); }, [fetchReview]);
+
+  const handleLegalReview = async (action: "approved" | "rejected") => {
+    if (!review) return;
+    setLegalSubmitting(true);
+    try {
+      const updated = await api.reviews.legalReview(review.id, action, legalNote || undefined);
+      setReview(prev => prev ? { ...prev, ...updated } : prev);
+      setLegalNote("");
+    } finally {
+      setLegalSubmitting(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!review || !confirm("Delete this review?")) return;
@@ -179,6 +195,93 @@ export default function ReviewDetail() {
               This content has a high compliance risk profile. Please forward to the legal team before publishing.
               The compliance flags below detail the specific issues that require legal assessment.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Legal status banners */}
+      {review.legal_status === "pending" && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-5 mb-6 flex items-start gap-4">
+          <Scale className="text-amber-600 flex-shrink-0 mt-0.5" size={22} />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-800 text-base">Pending Legal Approval</p>
+            <p className="text-sm text-amber-700 mt-1">
+              This content has been flagged for legal review due to its risk profile. The legal team has been notified and must approve it before publication.
+            </p>
+            {user?.is_admin && (
+              <div className="mt-4 space-y-2">
+                <textarea
+                  value={legalNote}
+                  onChange={(e) => setLegalNote(e.target.value)}
+                  placeholder="Optional note (visible to submitter)…"
+                  rows={2}
+                  className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleLegalReview("approved")}
+                    disabled={legalSubmitting}
+                    className="flex items-center gap-1.5 bg-near-green text-near-dark px-4 py-2 rounded-lg text-sm font-bold hover:bg-near-green-hover disabled:opacity-50"
+                  >
+                    <CheckCircle size={15} />
+                    {legalSubmitting ? "Saving…" : "Approve"}
+                  </button>
+                  <button
+                    onClick={() => handleLegalReview("rejected")}
+                    disabled={legalSubmitting}
+                    className="flex items-center gap-1.5 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 disabled:opacity-50"
+                  >
+                    <XCircle size={15} />
+                    {legalSubmitting ? "Saving…" : "Reject"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {review.legal_status === "approved" && (
+        <div className="bg-near-green-muted border border-near-green/40 rounded-xl p-5 mb-6 flex items-start gap-4">
+          <CheckCircle className="text-near-green-text flex-shrink-0 mt-0.5" size={22} />
+          <div>
+            <p className="font-semibold text-near-green-text text-base">Legal Approved</p>
+            <p className="text-sm text-near-green-text/80 mt-1">
+              This content has been cleared by the legal team and is approved for use.
+              {review.legal_reviewed_at && (
+                <span className="ml-1">({new Date(review.legal_reviewed_at).toLocaleString()})</span>
+              )}
+            </p>
+            {review.legal_note && (
+              <p className="text-sm text-near-green-text mt-1 italic">"{review.legal_note}"</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {review.legal_status === "rejected" && (
+        <div className="bg-red-50 border border-red-300 rounded-xl p-5 mb-6 flex items-start gap-4">
+          <XCircle className="text-red-600 flex-shrink-0 mt-0.5" size={22} />
+          <div>
+            <p className="font-semibold text-red-800 text-base">Changes Required by Legal</p>
+            {review.legal_note ? (
+              <p className="text-sm text-red-700 mt-1 italic">"{review.legal_note}"</p>
+            ) : (
+              <p className="text-sm text-red-700 mt-1">Legal has rejected this content. Please revise before resubmitting.</p>
+            )}
+            {review.legal_reviewed_at && (
+              <p className="text-xs text-red-500 mt-1">{new Date(review.legal_reviewed_at).toLocaleString()}</p>
+            )}
+            {user?.is_admin && (
+              <button
+                onClick={() => handleLegalReview("approved")}
+                disabled={legalSubmitting}
+                className="mt-3 flex items-center gap-1.5 bg-near-green text-near-dark px-4 py-2 rounded-lg text-sm font-bold hover:bg-near-green-hover disabled:opacity-50"
+              >
+                <CheckCircle size={15} />
+                Override & Approve
+              </button>
+            )}
           </div>
         </div>
       )}

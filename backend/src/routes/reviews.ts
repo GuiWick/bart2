@@ -3,7 +3,7 @@ import multer from "multer";
 import db, { rowToReview } from "../db";
 import { requireAuth, AuthRequest } from "../auth";
 import { analyzeContent } from "../services/claude";
-import { formatReportForSlack, postToResponseUrl, postReviewToChannel } from "../services/slack";
+import { formatReportForSlack, postToResponseUrl, postReviewToChannel, postLegalRequestToChannel } from "../services/slack";
 import { createReviewPage } from "../services/notion";
 
 const router = Router();
@@ -65,6 +65,12 @@ export async function runAnalysis(reviewId: number) {
       reviewId
     );
 
+    // Mark for legal review if risk > 70
+    const LEGAL_THRESHOLD = 70;
+    if ((result.risk_score as number) > LEGAL_THRESHOLD) {
+      db.prepare("UPDATE reviews SET legal_status = 'pending' WHERE id = ?").run(reviewId);
+    }
+
     // Post-analysis hooks
     const updatedRow = db.prepare("SELECT * FROM reviews WHERE id = ?").get(reviewId) as Record<string, unknown>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,15 +87,23 @@ export async function runAnalysis(reviewId: number) {
       } catch {}
     }
 
-    // Slack notification channel for web/non-command reviews
+    // Slack: legal review request (high risk) or general notification
     try {
       const slackCfg = getIntegrationConfig("slack");
-      if (slackCfg?.notification_channel_id && updatedRow.source !== "slack_command") {
-        postReviewToChannel(
-          slackCfg.bot_token as string,
-          slackCfg.notification_channel_id as string,
-          updatedReview
-        ).catch(console.error);
+      if (slackCfg && updatedRow.source !== "slack_command") {
+        if (updatedRow.legal_status === "pending" && slackCfg.legal_channel_id) {
+          postLegalRequestToChannel(
+            slackCfg.bot_token as string,
+            slackCfg.legal_channel_id as string,
+            updatedReview
+          ).catch(console.error);
+        } else if (slackCfg.notification_channel_id) {
+          postReviewToChannel(
+            slackCfg.bot_token as string,
+            slackCfg.notification_channel_id as string,
+            updatedReview
+          ).catch(console.error);
+        }
       }
     } catch {}
 
@@ -169,6 +183,22 @@ router.get("/:id", requireAuth, (req: AuthRequest, res) => {
   if (!row) { res.status(404).json({ detail: "Review not found" }); return; }
   if (!req.user!.is_admin && row.user_id !== req.user!.id) { res.status(403).json({ detail: "Access denied" }); return; }
   res.json({ ...rowToReview(row), user: { id: row.user_id, email: row.email, full_name: row.full_name } });
+});
+
+router.patch("/:id/legal-review", requireAuth, (req: AuthRequest, res) => {
+  if (!req.user!.is_admin) { res.status(403).json({ detail: "Admin only" }); return; }
+  const { action, note } = req.body as { action: "approved" | "rejected"; note?: string };
+  if (action !== "approved" && action !== "rejected") {
+    res.status(400).json({ detail: "action must be 'approved' or 'rejected'" });
+    return;
+  }
+  const row = db.prepare("SELECT * FROM reviews WHERE id = ?").get(parseInt(req.params.id)) as Record<string, unknown> | undefined;
+  if (!row) { res.status(404).json({ detail: "Review not found" }); return; }
+  db.prepare(
+    "UPDATE reviews SET legal_status = ?, legal_reviewed_by = ?, legal_reviewed_at = datetime('now'), legal_note = ? WHERE id = ?"
+  ).run(action, req.user!.id, note || null, parseInt(req.params.id));
+  const updated = rowToReview(db.prepare("SELECT * FROM reviews WHERE id = ?").get(parseInt(req.params.id)) as Record<string, unknown>);
+  res.json(updated);
 });
 
 router.delete("/:id", requireAuth, (req: AuthRequest, res) => {
