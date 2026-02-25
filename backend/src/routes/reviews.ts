@@ -3,9 +3,17 @@ import multer from "multer";
 import db, { rowToReview } from "../db";
 import { requireAuth, AuthRequest } from "../auth";
 import { analyzeContent } from "../services/claude";
+import { formatReportForSlack, postToResponseUrl, postReviewToChannel } from "../services/slack";
+import { createReviewPage } from "../services/notion";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+function getIntegrationConfig(platform: string): Record<string, unknown> | null {
+  const row = db.prepare("SELECT * FROM integration_configs WHERE platform = ? AND is_active = 1").get(platform) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return JSON.parse(row.config as string) as Record<string, unknown>;
+}
 
 async function extractText(buffer: Buffer, mimetype: string, originalname: string): Promise<string> {
   const ext = originalname.split(".").pop()?.toLowerCase();
@@ -56,6 +64,46 @@ export async function runAnalysis(reviewId: number) {
       result.summary as string,
       reviewId
     );
+
+    // Post-analysis hooks
+    const updatedRow = db.prepare("SELECT * FROM reviews WHERE id = ?").get(reviewId) as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updatedReview = rowToReview(updatedRow) as any;
+
+    // Slack slash command: post formatted report back to response_url
+    if (updatedRow.source === "slack_command" && updatedRow.source_reference) {
+      try {
+        const ref = JSON.parse(updatedRow.source_reference as string) as { response_url?: string };
+        if (ref.response_url) {
+          const blocks = formatReportForSlack(updatedReview);
+          postToResponseUrl(ref.response_url, blocks).catch(console.error);
+        }
+      } catch {}
+    }
+
+    // Slack notification channel for web/non-command reviews
+    try {
+      const slackCfg = getIntegrationConfig("slack");
+      if (slackCfg?.notification_channel_id && updatedRow.source !== "slack_command") {
+        postReviewToChannel(
+          slackCfg.bot_token as string,
+          slackCfg.notification_channel_id as string,
+          updatedReview
+        ).catch(console.error);
+      }
+    } catch {}
+
+    // Notion backup
+    try {
+      const notionCfg = getIntegrationConfig("notion");
+      if (notionCfg?.backup_database_id) {
+        createReviewPage(
+          notionCfg.api_key as string,
+          notionCfg.backup_database_id as string,
+          updatedReview
+        ).catch(console.error);
+      }
+    } catch {}
   } catch (err) {
     db.prepare("UPDATE reviews SET status = 'error', error_message = ? WHERE id = ?")
       .run(String(err), reviewId);

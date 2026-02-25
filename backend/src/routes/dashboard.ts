@@ -1,4 +1,5 @@
 import { Router } from "express";
+import Anthropic from "@anthropic-ai/sdk";
 import db, { rowToReview } from "../db";
 import { requireAuth, AuthRequest } from "../auth";
 
@@ -66,6 +67,92 @@ router.get("/stats", requireAuth, (req: AuthRequest, res) => {
     content_type_distribution: contentTypeDist,
     recent_reviews: recent,
   });
+});
+
+router.post("/analyze-patterns", requireAuth, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const isAdmin = req.user!.is_admin;
+
+  const where = isAdmin
+    ? "WHERE status = 'completed'"
+    : "WHERE user_id = ? AND status = 'completed'";
+  const params = isAdmin ? [] : [userId];
+
+  const rows = db.prepare(
+    `SELECT content_type, jurisdiction, overall_rating, brand_score, risk_score, sentiment, compliance_flags FROM reviews ${where} ORDER BY created_at DESC LIMIT 50`
+  ).all(...params) as Record<string, unknown>[];
+
+  if (rows.length < 3) {
+    res.status(400).json({ detail: "At least 3 completed reviews are needed for pattern analysis." });
+    return;
+  }
+
+  const summary = rows.map(r => ({
+    content_type: r.content_type,
+    jurisdiction: r.jurisdiction || "general",
+    rating: r.overall_rating,
+    brand_score: r.brand_score,
+    risk_score: r.risk_score,
+    sentiment: r.sentiment,
+    top_flags: (() => {
+      try {
+        const flags = JSON.parse(r.compliance_flags as string || "[]") as { issue?: string }[];
+        return flags.slice(0, 3).map(f => f.issue || "").filter(Boolean);
+      } catch { return []; }
+    })(),
+  }));
+
+  const gl = db.prepare("SELECT content FROM brand_guidelines LIMIT 1").get() as { content: string } | undefined;
+  const guidelinesText = gl?.content?.trim() || "(none configured)";
+
+  const prompt = `You are a senior brand strategist and compliance advisor at NEAR Foundation.
+
+Below is a summary of ${summary.length} recent content reviews and the current brand guidelines.
+
+## Review History Summary
+${JSON.stringify(summary, null, 2)}
+
+## Current Brand Guidelines
+${guidelinesText.slice(0, 3000)}
+
+Analyze the review history to identify recurring patterns, sentiment trends, jurisdiction-specific issues, and areas where the brand guidelines could be improved or expanded.
+
+Return ONLY valid JSON (no markdown fences) matching this exact schema:
+{
+  "patterns": ["<pattern observed across reviews>"],
+  "sentiment_insights": "<overall observation about sentiment trends>",
+  "jurisdiction_notes": { "<jurisdiction>": "<specific observations for that jurisdiction>" },
+  "guideline_suggestions": [
+    {
+      "suggestion": "<specific guideline text to add or modify>",
+      "rationale": "<why this would help based on observed patterns>"
+    }
+  ]
+}`;
+
+  try {
+    const client = new Anthropic();
+    const stream = client.messages.stream({
+      model: "claude-opus-4-6",
+      max_tokens: 8000,
+      // @ts-ignore — adaptive thinking supported but not in SDK types
+      thinking: { type: "adaptive" },
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const final = await stream.finalMessage();
+    let text = "";
+    for (const block of final.content) {
+      if (block.type === "text") { text = block.text.trim(); break; }
+    }
+    if (text.startsWith("```")) {
+      const lines = text.split("\n");
+      text = lines.slice(1, lines[lines.length - 1].trim() === "```" ? -1 : undefined).join("\n");
+    }
+    res.json(JSON.parse(text));
+  } catch (err) {
+    res.status(500).json({ detail: String(err) });
+  }
 });
 
 export default router;

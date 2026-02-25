@@ -1,7 +1,8 @@
-import { Router } from "express";
+import express, { Router } from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import db from "../db";
 import { requireAuth, requireAdmin, AuthRequest } from "../auth";
-import { listChannels, getChannelMessages } from "../services/slack";
+import { listChannels, getChannelMessages, formatReportForSlack, postToResponseUrl } from "../services/slack";
 import { listDatabases, getDatabasePages } from "../services/notion";
 import { runAnalysis } from "./reviews";
 
@@ -16,13 +17,23 @@ function getConfig(platform: string) {
 // ── Slack ─────────────────────────────────────────────────────────────────────
 
 router.post("/slack/config", requireAdmin, (req, res) => {
-  const { bot_token, channel_ids = [] } = req.body;
-  const existing = db.prepare("SELECT id FROM integration_configs WHERE platform = 'slack'").get();
-  if (existing) {
+  const { bot_token, channel_ids = [], signing_secret, notification_channel_id } = req.body;
+  const existingRow = db.prepare("SELECT config FROM integration_configs WHERE platform = 'slack'").get() as { config: string } | undefined;
+  const existingCfg: Record<string, unknown> = existingRow ? JSON.parse(existingRow.config) : {};
+  const cfg: Record<string, unknown> = {
+    ...existingCfg,
+    bot_token: bot_token !== undefined ? bot_token : existingCfg.bot_token,
+    channel_ids,
+  };
+  if (signing_secret !== undefined) cfg.signing_secret = signing_secret;
+  if (notification_channel_id !== undefined) cfg.notification_channel_id = notification_channel_id;
+
+  const existingId = db.prepare("SELECT id FROM integration_configs WHERE platform = 'slack'").get();
+  if (existingId) {
     db.prepare("UPDATE integration_configs SET config = ?, is_active = 1, updated_at = datetime('now') WHERE platform = 'slack'")
-      .run(JSON.stringify({ bot_token, channel_ids }));
+      .run(JSON.stringify(cfg));
   } else {
-    db.prepare("INSERT INTO integration_configs (platform, config) VALUES ('slack', ?)").run(JSON.stringify({ bot_token, channel_ids }));
+    db.prepare("INSERT INTO integration_configs (platform, config) VALUES ('slack', ?)").run(JSON.stringify(cfg));
   }
   res.json({ status: "saved" });
 });
@@ -58,16 +69,95 @@ router.post("/slack/fetch", requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
+// Slack slash command — no auth, called directly by Slack
+router.post("/slack/command",
+  express.raw({ type: "*/*" }),
+  async (req, res) => {
+    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf-8") : String(req.body);
+    const params = new URLSearchParams(rawBody);
+
+    const cfg = getConfig("slack");
+    if (!cfg) {
+      res.status(200).json({ text: "Slack integration is not configured." });
+      return;
+    }
+
+    // Verify Slack signing secret if configured
+    const signingSecret = cfg.signing_secret as string | undefined;
+    if (signingSecret) {
+      const timestamp = req.headers["x-slack-request-timestamp"] as string;
+      const slackSig = req.headers["x-slack-signature"] as string;
+      const age = Math.abs(Date.now() / 1000 - parseInt(timestamp || "0", 10));
+      if (!timestamp || !slackSig || age > 300) {
+        res.status(400).json({ text: "Request verification failed." });
+        return;
+      }
+      const hmac = `v0=${createHmac("sha256", signingSecret).update(`v0:${timestamp}:${rawBody}`).digest("hex")}`;
+      try {
+        if (slackSig.length !== hmac.length || !timingSafeEqual(Buffer.from(slackSig), Buffer.from(hmac))) {
+          res.status(403).json({ text: "Invalid signature." });
+          return;
+        }
+      } catch {
+        res.status(403).json({ text: "Invalid signature." });
+        return;
+      }
+    }
+
+    const commandText = params.get("text") || "";
+    const responseUrl = params.get("response_url") || "";
+    const channelId = params.get("channel_id") || "";
+    const slackUserId = params.get("user_id") || "";
+
+    // Parse optional flags --type and --jur
+    let contentType = "social_media";
+    let jurisdiction = "general";
+    let content = commandText;
+    const typeMatch = content.match(/--type\s+(\S+)/);
+    const jurMatch = content.match(/--jur\s+(\S+)/);
+    if (typeMatch) { contentType = typeMatch[1]; content = content.replace(typeMatch[0], "").trim(); }
+    if (jurMatch) { jurisdiction = jurMatch[1]; content = content.replace(jurMatch[0], "").trim(); }
+    content = content.trim();
+
+    if (!content) {
+      res.status(200).json({ text: "Usage: `/bart [content] [--type social_media|blog|email|ad_copy|crypto_marketing|financial_product] [--jur US|UK|CH|EU|general]`" });
+      return;
+    }
+
+    // Respond immediately — Slack requires a response within 3 seconds
+    res.status(200).json({ text: ":mag: Analyzing content… I'll post the report here when done." });
+
+    // Insert review under first admin user
+    const adminRow = db.prepare("SELECT id FROM users WHERE is_admin = 1 LIMIT 1").get() as { id: number } | undefined;
+    const userId = adminRow?.id ?? 1;
+    const sourceRef = JSON.stringify({ response_url: responseUrl, channel_id: channelId, user_id: slackUserId });
+    const insertResult = db.prepare(
+      "INSERT INTO reviews (user_id, content_type, original_content, source, source_reference, jurisdiction) VALUES (?, ?, ?, 'slack_command', ?, ?)"
+    ).run(userId, contentType, content, sourceRef, jurisdiction);
+
+    runAnalysis(insertResult.lastInsertRowid as number).catch(console.error);
+  }
+);
+
 // ── Notion ────────────────────────────────────────────────────────────────────
 
 router.post("/notion/config", requireAdmin, (req, res) => {
-  const { api_key, database_ids = [] } = req.body;
-  const existing = db.prepare("SELECT id FROM integration_configs WHERE platform = 'notion'").get();
-  if (existing) {
+  const { api_key, database_ids = [], backup_database_id } = req.body;
+  const existingRow = db.prepare("SELECT config FROM integration_configs WHERE platform = 'notion'").get() as { config: string } | undefined;
+  const existingCfg: Record<string, unknown> = existingRow ? JSON.parse(existingRow.config) : {};
+  const cfg: Record<string, unknown> = {
+    ...existingCfg,
+    api_key: api_key !== undefined ? api_key : existingCfg.api_key,
+    database_ids,
+  };
+  if (backup_database_id !== undefined) cfg.backup_database_id = backup_database_id;
+
+  const existingId = db.prepare("SELECT id FROM integration_configs WHERE platform = 'notion'").get();
+  if (existingId) {
     db.prepare("UPDATE integration_configs SET config = ?, is_active = 1, updated_at = datetime('now') WHERE platform = 'notion'")
-      .run(JSON.stringify({ api_key, database_ids }));
+      .run(JSON.stringify(cfg));
   } else {
-    db.prepare("INSERT INTO integration_configs (platform, config) VALUES ('notion', ?)").run(JSON.stringify({ api_key, database_ids }));
+    db.prepare("INSERT INTO integration_configs (platform, config) VALUES ('notion', ?)").run(JSON.stringify(cfg));
   }
   res.json({ status: "saved" });
 });
@@ -110,4 +200,5 @@ router.get("/status", requireAuth, (_req, res) => {
   res.json(status);
 });
 
+export { getConfig };
 export default router;

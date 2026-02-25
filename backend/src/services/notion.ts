@@ -1,5 +1,73 @@
 import { Client } from "@notionhq/client";
 
+interface ReviewData {
+  id: number;
+  content_type: string;
+  overall_rating?: unknown;
+  brand_score?: unknown;
+  risk_score?: unknown;
+  summary?: unknown;
+  brand_feedback?: unknown;
+  sentiment_feedback?: unknown;
+  suggested_rewrite?: unknown;
+  compliance_flags?: { text: string; issue: string; severity: string }[];
+  original_content: string;
+  created_at: string;
+}
+
+function rt(content: string): { text: { content: string } }[] {
+  return [{ text: { content: content.slice(0, 2000) } }];
+}
+
+export async function createReviewPage(apiKey: string, databaseId: string, review: ReviewData): Promise<void> {
+  const client = new Client({ auth: apiKey });
+  const date = new Date(review.created_at).toISOString().split("T")[0];
+  const title = `${review.overall_rating ?? "?"} · ${review.content_type} · ${date}`;
+  const flags = review.compliance_flags || [];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const children: any[] = [
+    { object: "block", type: "heading_2", heading_2: { rich_text: rt("Summary") } },
+    { object: "block", type: "paragraph", paragraph: { rich_text: rt(String(review.summary || "")) } },
+    { object: "block", type: "heading_2", heading_2: { rich_text: rt("Brand Feedback") } },
+    { object: "block", type: "paragraph", paragraph: { rich_text: rt(String(review.brand_feedback || "")) } },
+  ];
+
+  if (flags.length > 0) {
+    children.push({ object: "block", type: "heading_2", heading_2: { rich_text: rt(`Compliance Flags (${flags.length})`) } });
+    for (const flag of flags) {
+      children.push({
+        object: "block",
+        type: "bulleted_list_item",
+        bulleted_list_item: { rich_text: rt(`[${flag.severity.toUpperCase()}] ${flag.issue}: ${flag.text}`) },
+      });
+    }
+  }
+
+  children.push(
+    { object: "block", type: "heading_2", heading_2: { rich_text: rt("Sentiment Feedback") } },
+    { object: "block", type: "paragraph", paragraph: { rich_text: rt(String(review.sentiment_feedback || "")) } },
+  );
+
+  if (review.suggested_rewrite) {
+    children.push(
+      { object: "block", type: "heading_2", heading_2: { rich_text: rt("Suggested Rewrite") } },
+      { object: "block", type: "paragraph", paragraph: { rich_text: rt(String(review.suggested_rewrite)) } },
+    );
+  }
+
+  children.push(
+    { object: "block", type: "heading_2", heading_2: { rich_text: rt("Original Content") } },
+    { object: "block", type: "paragraph", paragraph: { rich_text: rt(review.original_content) } },
+  );
+
+  await client.pages.create({
+    parent: { database_id: databaseId },
+    properties: { Name: { title: [{ text: { content: title } }] } },
+    children,
+  });
+}
+
 function extractRichText(arr: { plain_text?: string }[]): string {
   return arr.map((t) => t.plain_text || "").join("");
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, Review } from "../api/client";
 import { ScoreBadge, RatingBadge, SentimentBadge, SeverityBadge } from "../components/ScoreBadge";
-import { AlertTriangle, CheckCircle, RefreshCw, Trash2, ChevronDown, ChevronUp, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle, RefreshCw, Trash2, ChevronDown, ChevronUp, ShieldAlert, Download } from "lucide-react";
 
 const LEGAL_RISK_THRESHOLD = 70;
 
@@ -34,6 +34,56 @@ export default function ReviewDetail() {
     if (!review || !confirm("Delete this review?")) return;
     await api.reviews.delete(review.id);
     navigate("/history");
+  };
+
+  const handleDownload = () => {
+    if (!review || review.status !== "completed") return;
+    const date = new Date(review.created_at).toISOString().split("T")[0];
+    const flags = review.compliance_flags || [];
+    const flagLines = flags.map(f =>
+      `- [${f.severity.toUpperCase()}] "${f.text}"\n  Issue: ${f.issue}\n  Suggestion: ${f.suggestion}`
+    ).join("\n");
+
+    const lines: string[] = [
+      `# Content Review #${review.id}`,
+      `**Date:** ${new Date(review.created_at).toLocaleString()}`,
+      `**Content Type:** ${CONTENT_LABELS[review.content_type] || review.content_type}`,
+      ...(review.jurisdiction && review.jurisdiction !== "general" ? [`**Jurisdiction:** ${review.jurisdiction}`] : []),
+      ``,
+      `## Scores`,
+      `- Overall Rating: ${review.overall_rating ?? "–"}`,
+      `- Brand Score: ${review.brand_score != null ? review.brand_score + "/100" : "–"}`,
+      `- Risk Score: ${review.risk_score ?? 0}%`,
+      `- Sentiment: ${review.sentiment ?? "–"} (${review.sentiment_score != null ? Math.round(review.sentiment_score * 100) + "%" : "–"})`,
+      ``,
+      `## Summary`,
+      review.summary || "",
+      ``,
+      `## Brand Voice Feedback`,
+      review.brand_feedback || "",
+      ``,
+      `## Compliance Flags (${flags.length})`,
+      flagLines || "No compliance issues found.",
+      ``,
+      `## Sentiment Analysis`,
+      review.sentiment_feedback || "",
+      ``,
+      `## Original Content`,
+      "```",
+      review.original_content,
+      "```",
+      ...(review.suggested_rewrite ? [``, `## Suggested Rewrite`, review.suggested_rewrite] : []),
+    ];
+
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `review-${review.id}-${date}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   if (loading) {
@@ -98,6 +148,14 @@ export default function ReviewDetail() {
             title="Refresh"
           >
             <RefreshCw size={16} />
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={review.status !== "completed"}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Download report"
+          >
+            <Download size={16} />
           </button>
           <button
             onClick={handleDelete}

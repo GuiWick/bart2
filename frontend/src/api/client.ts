@@ -77,6 +77,7 @@ export const api = {
 
   dashboard: {
     stats: () => request<DashboardStats>("/dashboard/stats"),
+    analyzePatterns: () => request<PatternAnalysis>("/dashboard/analyze-patterns", { method: "POST" }),
   },
 
   settings: {
@@ -90,10 +91,10 @@ export const api = {
 
   integrations: {
     status: () => request<{ slack: boolean; notion: boolean }>("/integrations/status"),
-    saveSlack: (bot_token: string, channel_ids: string[]) =>
+    saveSlack: (bot_token: string, channel_ids: string[], signing_secret?: string, notification_channel_id?: string) =>
       request<{ status: string }>("/integrations/slack/config", {
         method: "POST",
-        body: JSON.stringify({ bot_token, channel_ids }),
+        body: JSON.stringify({ bot_token, channel_ids, signing_secret, notification_channel_id }),
       }),
     slackChannels: () => request<SlackChannel[]>("/integrations/slack/channels"),
     fetchSlack: (channel_id: string, limit = 20) =>
@@ -101,10 +102,10 @@ export const api = {
         `/integrations/slack/fetch?channel_id=${channel_id}&limit=${limit}`,
         { method: "POST" }
       ),
-    saveNotion: (api_key: string, database_ids: string[]) =>
+    saveNotion: (api_key: string, database_ids: string[], backup_database_id?: string) =>
       request<{ status: string }>("/integrations/notion/config", {
         method: "POST",
-        body: JSON.stringify({ api_key, database_ids }),
+        body: JSON.stringify({ api_key, database_ids, backup_database_id }),
       }),
     notionDatabases: () => request<NotionDatabase[]>("/integrations/notion/databases"),
     fetchNotion: (database_id: string, content_type: string, limit = 20) =>
@@ -183,4 +184,11 @@ export interface SlackChannel {
 export interface NotionDatabase {
   id: string;
   title: string;
+}
+
+export interface PatternAnalysis {
+  patterns: string[];
+  sentiment_insights: string;
+  jurisdiction_notes: Record<string, string>;
+  guideline_suggestions: { suggestion: string; rationale: string }[];
 }

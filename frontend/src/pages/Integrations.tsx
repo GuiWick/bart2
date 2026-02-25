@@ -12,6 +12,8 @@ export default function Integrations() {
 
   // Slack state
   const [slackToken, setSlackToken] = useState("");
+  const [slackSigningSecret, setSlackSigningSecret] = useState("");
+  const [slackNotifChannel, setSlackNotifChannel] = useState("");
   const [slackChannels, setSlackChannels] = useState<SlackChannel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState("");
   const [slackFetchLimit, setSlackFetchLimit] = useState(10);
@@ -23,6 +25,7 @@ export default function Integrations() {
   const [notionKey, setNotionKey] = useState("");
   const [notionDbs, setNotionDbs] = useState<NotionDatabase[]>([]);
   const [selectedDb, setSelectedDb] = useState("");
+  const [backupDb, setBackupDb] = useState("");
   const [notionContentType, setNotionContentType] = useState("blog");
   const [notionSaving, setNotionSaving] = useState(false);
   const [notionFetching, setNotionFetching] = useState(false);
@@ -42,13 +45,36 @@ export default function Integrations() {
     setSlackSaving(true);
     setSlackMsg("");
     try {
-      await api.integrations.saveSlack(slackToken, []);
+      await api.integrations.saveSlack(
+        slackToken,
+        [],
+        slackSigningSecret || undefined,
+        slackNotifChannel || undefined
+      );
       const channels = await api.integrations.slackChannels();
       setSlackChannels(channels);
       setStatus((s) => ({ ...s, slack: true }));
       setSlackMsg("Connected! Select a channel to import messages.");
     } catch (err: unknown) {
       setSlackMsg(err instanceof Error ? err.message : "Failed to connect");
+    } finally {
+      setSlackSaving(false);
+    }
+  };
+
+  const saveSlackSettings = async () => {
+    setSlackSaving(true);
+    setSlackMsg("");
+    try {
+      await api.integrations.saveSlack(
+        "",
+        [],
+        slackSigningSecret || undefined,
+        slackNotifChannel || undefined
+      );
+      setSlackMsg("Settings saved.");
+    } catch (err: unknown) {
+      setSlackMsg(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSlackSaving(false);
     }
@@ -73,13 +99,26 @@ export default function Integrations() {
     setNotionSaving(true);
     setNotionMsg("");
     try {
-      await api.integrations.saveNotion(notionKey, []);
+      await api.integrations.saveNotion(notionKey, [], backupDb || undefined);
       const dbs = await api.integrations.notionDatabases();
       setNotionDbs(dbs);
       setStatus((s) => ({ ...s, notion: true }));
       setNotionMsg("Connected! Select a database to import pages.");
     } catch (err: unknown) {
       setNotionMsg(err instanceof Error ? err.message : "Failed to connect");
+    } finally {
+      setNotionSaving(false);
+    }
+  };
+
+  const saveNotionSettings = async () => {
+    setNotionSaving(true);
+    setNotionMsg("");
+    try {
+      await api.integrations.saveNotion("", [], backupDb || undefined);
+      setNotionMsg("Settings saved.");
+    } catch (err: unknown) {
+      setNotionMsg(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setNotionSaving(false);
     }
@@ -115,7 +154,7 @@ export default function Integrations() {
           <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 font-bold text-lg">#</div>
           <div>
             <h2 className="font-semibold text-gray-900">Slack</h2>
-            <p className="text-xs text-gray-500">Import messages from channels</p>
+            <p className="text-xs text-gray-500">Import messages · slash command · notifications</p>
           </div>
           {status.slack && (
             <CheckCircle size={18} className="text-green-500 ml-auto" />
@@ -136,8 +175,20 @@ export default function Integrations() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-near-green"
               />
               <p className="text-xs text-gray-400 mt-1">
-                Create a Slack app with <code>channels:history</code>, <code>channels:read</code> scopes.
+                Create a Slack app with <code>channels:history</code>, <code>channels:read</code>, <code>chat:write</code> scopes.
               </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Signing Secret <span className="text-gray-400">(optional — required for /bart slash command)</span>
+              </label>
+              <input
+                type="password"
+                value={slackSigningSecret}
+                onChange={(e) => setSlackSigningSecret(e.target.value)}
+                placeholder="••••••••"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-near-green"
+              />
             </div>
             <button
               onClick={saveSlack}
@@ -150,42 +201,91 @@ export default function Integrations() {
         )}
 
         {slackChannels.length > 0 && (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Channel</label>
-              <select
-                value={selectedChannel}
-                onChange={(e) => setSelectedChannel(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+          <div className="space-y-4">
+            {/* Import section */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Import from channel</label>
+                <select
+                  value={selectedChannel}
+                  onChange={(e) => setSelectedChannel(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                >
+                  <option value="">Select a channel…</option>
+                  {slackChannels.map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      #{ch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Messages to import
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={slackFetchLimit}
+                  onChange={(e) => setSlackFetchLimit(parseInt(e.target.value))}
+                  className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                />
+              </div>
+              <button
+                onClick={fetchSlack}
+                disabled={slackFetching || !selectedChannel}
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
               >
-                <option value="">Select a channel…</option>
-                {slackChannels.map((ch) => (
-                  <option key={ch.id} value={ch.id}>
-                    #{ch.name}
-                  </option>
-                ))}
-              </select>
+                {slackFetching ? "Importing…" : "Import & Review"}
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Messages to import
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={slackFetchLimit}
-                onChange={(e) => setSlackFetchLimit(parseInt(e.target.value))}
-                className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
-              />
-            </div>
-            <button
-              onClick={fetchSlack}
-              disabled={slackFetching || !selectedChannel}
-              className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
-            >
-              {slackFetching ? "Importing…" : "Import & Review"}
-            </button>
+
+            {/* Settings section (admin only) */}
+            {user?.is_admin && (
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Slash Command & Notifications</p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Signing Secret <span className="text-gray-400">(for /bart command verification)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={slackSigningSecret}
+                    onChange={(e) => setSlackSigningSecret(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-near-green"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Point your Slack app's slash command to <code>[your-url]/api/integrations/slack/command</code>
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notification channel <span className="text-gray-400">(post reports here when web reviews complete)</span>
+                  </label>
+                  <select
+                    value={slackNotifChannel}
+                    onChange={(e) => setSlackNotifChannel(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  >
+                    <option value="">None</option>
+                    {slackChannels.map((ch) => (
+                      <option key={ch.id} value={ch.id}>
+                        #{ch.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={saveSlackSettings}
+                  disabled={slackSaving}
+                  className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {slackSaving ? "Saving…" : "Save settings"}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -202,7 +302,7 @@ export default function Integrations() {
           <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center text-gray-600 font-bold">N</div>
           <div>
             <h2 className="font-semibold text-gray-900">Notion</h2>
-            <p className="text-xs text-gray-500">Import pages from databases</p>
+            <p className="text-xs text-gray-500">Import pages · auto-backup completed reviews</p>
           </div>
           {status.notion && (
             <CheckCircle size={18} className="text-green-500 ml-auto" />
@@ -237,40 +337,75 @@ export default function Integrations() {
         )}
 
         {notionDbs.length > 0 && (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Database</label>
-              <select
-                value={selectedDb}
-                onChange={(e) => setSelectedDb(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+          <div className="space-y-4">
+            {/* Import section */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Import from database</label>
+                <select
+                  value={selectedDb}
+                  onChange={(e) => setSelectedDb(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                >
+                  <option value="">Select a database…</option>
+                  {notionDbs.map((db) => (
+                    <option key={db.id} value={db.id}>{db.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Content type</label>
+                <select
+                  value={notionContentType}
+                  onChange={(e) => setNotionContentType(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                >
+                  <option value="blog">Blog / Website Copy</option>
+                  <option value="email">Email Campaign</option>
+                  <option value="social_media">Social Media</option>
+                  <option value="ad_copy">Ad Copy</option>
+                </select>
+              </div>
+              <button
+                onClick={fetchNotion}
+                disabled={notionFetching || !selectedDb}
+                className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-50"
               >
-                <option value="">Select a database…</option>
-                {notionDbs.map((db) => (
-                  <option key={db.id} value={db.id}>{db.title}</option>
-                ))}
-              </select>
+                {notionFetching ? "Importing…" : "Import & Review"}
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Content type</label>
-              <select
-                value={notionContentType}
-                onChange={(e) => setNotionContentType(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
-              >
-                <option value="blog">Blog / Website Copy</option>
-                <option value="email">Email Campaign</option>
-                <option value="social_media">Social Media</option>
-                <option value="ad_copy">Ad Copy</option>
-              </select>
-            </div>
-            <button
-              onClick={fetchNotion}
-              disabled={notionFetching || !selectedDb}
-              className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-50"
-            >
-              {notionFetching ? "Importing…" : "Import & Review"}
-            </button>
+
+            {/* Backup settings (admin only) */}
+            {user?.is_admin && (
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Auto-Backup</p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Backup database <span className="text-gray-400">(optional)</span>
+                  </label>
+                  <select
+                    value={backupDb}
+                    onChange={(e) => setBackupDb(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  >
+                    <option value="">None</option>
+                    {notionDbs.map((db) => (
+                      <option key={db.id} value={db.id}>{db.title}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Completed reviews will be automatically saved here. Database only needs a <code>Name</code> (title) property.
+                  </p>
+                </div>
+                <button
+                  onClick={saveNotionSettings}
+                  disabled={notionSaving}
+                  className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-50"
+                >
+                  {notionSaving ? "Saving…" : "Save settings"}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

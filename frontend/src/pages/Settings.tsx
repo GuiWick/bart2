@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { api, BrandGuidelines } from "../api/client";
+import { api, BrandGuidelines, PatternAnalysis } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
-import { Save, CheckCircle } from "lucide-react";
+import { Save, CheckCircle, ChevronDown, ChevronUp, Copy } from "lucide-react";
 
 export default function Settings() {
   const { user } = useAuth();
@@ -16,6 +16,13 @@ export default function Settings() {
   const [newPassword, setNewPassword] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+
+  // Pattern analysis
+  const [patternOpen, setPatternOpen] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [patternResult, setPatternResult] = useState<PatternAnalysis | null>(null);
+  const [patternError, setPatternError] = useState("");
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   useEffect(() => {
     api.settings.getGuidelines().then((g) => {
@@ -52,6 +59,27 @@ export default function Settings() {
     } finally {
       setProfileSaving(false);
     }
+  };
+
+  const handleAnalyzePatterns = async () => {
+    setAnalyzing(true);
+    setPatternError("");
+    setPatternResult(null);
+    try {
+      const result = await api.dashboard.analyzePatterns();
+      setPatternResult(result);
+    } catch (err: unknown) {
+      setPatternError(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleCopy = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 2000);
+    });
   };
 
   return (
@@ -107,6 +135,110 @@ export default function Settings() {
             <Save size={16} />
             {saving ? "Saving…" : "Save guidelines"}
           </button>
+        )}
+      </div>
+
+      {/* Pattern Analysis */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <button
+          onClick={() => setPatternOpen((o) => !o)}
+          className="w-full flex items-center justify-between p-6 hover:bg-gray-50 rounded-xl text-left"
+        >
+          <div>
+            <h2 className="font-semibold text-gray-900">Pattern Analysis & Insights</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Analyze recent reviews to discover trends and improve guidelines.
+            </p>
+          </div>
+          {patternOpen ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+        </button>
+
+        {patternOpen && (
+          <div className="px-6 pb-6 space-y-4 border-t border-gray-100">
+            <div className="pt-4">
+              <button
+                onClick={handleAnalyzePatterns}
+                disabled={analyzing}
+                className="flex items-center gap-2 bg-near-green text-near-dark px-4 py-2 rounded-lg text-sm font-bold hover:bg-near-green-hover disabled:opacity-50"
+              >
+                {analyzing && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-near-dark" />
+                )}
+                {analyzing ? "Analyzing…" : "Analyze Recent Reviews"}
+              </button>
+              <p className="text-xs text-gray-400 mt-1">Requires at least 3 completed reviews. May take ~30 seconds.</p>
+            </div>
+
+            {patternError && (
+              <p className="text-red-600 text-sm">{patternError}</p>
+            )}
+
+            {patternResult && (
+              <div className="space-y-5">
+                {/* Key Patterns */}
+                {patternResult.patterns.length > 0 && (
+                  <div>
+                    <h3 className="font-medium text-gray-900 mb-2">Key Patterns</h3>
+                    <ul className="space-y-1">
+                      {patternResult.patterns.map((p, i) => (
+                        <li key={i} className="text-sm text-gray-700 flex gap-2">
+                          <span className="text-near-green-text font-bold mt-0.5">•</span>
+                          <span>{p}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Sentiment Insights */}
+                {patternResult.sentiment_insights && (
+                  <div>
+                    <h3 className="font-medium text-gray-900 mb-1">Sentiment Insights</h3>
+                    <p className="text-sm text-gray-700">{patternResult.sentiment_insights}</p>
+                  </div>
+                )}
+
+                {/* Jurisdiction Notes */}
+                {Object.keys(patternResult.jurisdiction_notes).length > 0 && (
+                  <div>
+                    <h3 className="font-medium text-gray-900 mb-2">Jurisdiction Notes</h3>
+                    <div className="space-y-2">
+                      {Object.entries(patternResult.jurisdiction_notes).map(([jur, note]) => (
+                        <div key={jur} className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{jur}</p>
+                          <p className="text-sm text-gray-700">{note}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Guideline Suggestions */}
+                {patternResult.guideline_suggestions.length > 0 && (
+                  <div>
+                    <h3 className="font-medium text-gray-900 mb-2">Suggested Guideline Updates</h3>
+                    <div className="space-y-3">
+                      {patternResult.guideline_suggestions.map((s, i) => (
+                        <div key={i} className="border border-near-green/30 rounded-lg p-4 bg-near-green-muted">
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-sm text-gray-900 font-medium flex-1">{s.suggestion}</p>
+                            <button
+                              onClick={() => handleCopy(s.suggestion, i)}
+                              className="flex-shrink-0 p-1.5 text-near-green-text hover:bg-near-green/20 rounded"
+                              title="Copy suggestion"
+                            >
+                              {copiedIdx === i ? <CheckCircle size={15} /> : <Copy size={15} />}
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-2">{s.rationale}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
