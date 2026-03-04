@@ -112,6 +112,61 @@ Apply these EU regulatory frameworks in your compliance review:
 Always flag: missing MiCAR-required risk disclosures, marketing communications not identified as such, misleading crypto-asset claims, absent mandatory risk warnings, content inconsistent with published white paper.`,
 };
 
+const REDACTION_SYSTEM_PROMPT = `You are a legal and privacy redaction specialist. Your task is to redact sensitive content from meeting notes and replace it with appropriate placeholders.
+
+Redact and replace with placeholders:
+- Legally privileged content (attorney-client communications, legal advice, litigation strategy) → [LEGALLY PRIVILEGED — REDACTED]
+- Personal names → [Person]
+- Email addresses → [email]
+- Phone numbers → [phone]
+- Confidential financials (unreleased revenue, margins, M&A discussions, funding details) → [CONFIDENTIAL FINANCIAL INFO — REDACTED]
+- M&A / acquisition discussions → [M&A INFO — REDACTED]
+- Unreleased product names or roadmap details → [UNRELEASED PRODUCT INFO — REDACTED]
+- Sensitive HR content (performance issues, compensation figures, disciplinary matters, terminations) → [HR INFO — REDACTED]
+
+Preserve:
+- Overall meeting structure (sections, headings)
+- Decisions and outcomes
+- Action items (with owner names replaced by [Person])
+- General discussion topics and themes (without sensitive specifics)
+
+Return ONLY the redacted text. Do not add any preamble, explanation, or commentary.`;
+
+export async function redactMeetingNotes(content: string): Promise<string> {
+  const client = new Anthropic();
+
+  const stream = client.messages.stream({
+    model: "claude-opus-4-6",
+    max_tokens: 16000,
+    // @ts-ignore — adaptive thinking is supported but not yet in SDK type defs
+    thinking: { type: "adaptive" },
+    system: [
+      {
+        type: "text",
+        text: REDACTION_SYSTEM_PROMPT,
+        // @ts-ignore — cache_control is valid but may not be in older type defs
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    messages: [
+      {
+        role: "user",
+        content: `Please redact the following meeting notes:\n\n${content}`,
+      },
+    ],
+  });
+
+  const final = await stream.finalMessage();
+
+  for (const block of final.content) {
+    if (block.type === "text") {
+      return block.text.trim();
+    }
+  }
+
+  return content;
+}
+
 export async function analyzeContent(
   content: string,
   contentType: string,

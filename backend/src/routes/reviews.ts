@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import db, { rowToReview } from "../db";
 import { requireAuth, AuthRequest } from "../auth";
-import { analyzeContent } from "../services/claude";
+import { analyzeContent, redactMeetingNotes } from "../services/claude";
 import { formatReportForSlack, postToResponseUrl, postReviewToChannel, postLegalRequestToChannel } from "../services/slack";
 import { createReviewPage } from "../services/notion";
 
@@ -123,6 +123,24 @@ export async function runAnalysis(reviewId: number) {
       .run(String(err), reviewId);
   }
 }
+
+router.post("/redact", requireAuth, async (req: AuthRequest, res) => {
+  const { content, source } = req.body as { content?: string; source?: string };
+  if (!content?.trim()) {
+    res.status(400).json({ detail: "content is required" });
+    return;
+  }
+  try {
+    const redacted = await redactMeetingNotes(content);
+    // Fire-and-forget log
+    db.prepare(
+      "INSERT INTO redactions (user_id, source, original_length, redacted_length) VALUES (?, ?, ?, ?)"
+    ).run(req.user!.id, source || null, content.length, redacted.length);
+    res.json({ redacted });
+  } catch (err) {
+    res.status(500).json({ detail: String(err) });
+  }
+});
 
 router.post("/", requireAuth, (req: AuthRequest, res) => {
   const { content_type, original_content, source = "manual", source_reference = null, jurisdiction = "general" } = req.body;

@@ -22,6 +22,15 @@ try { db.exec("ALTER TABLE reviews ADD COLUMN legal_reviewed_at TEXT DEFAULT NUL
 try { db.exec("ALTER TABLE reviews ADD COLUMN legal_note TEXT DEFAULT NULL"); } catch {}
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS redactions (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id          INTEGER,
+    source           TEXT,
+    original_length  INTEGER,
+    redacted_length  INTEGER,
+    created_at       TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS users (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     email           TEXT UNIQUE NOT NULL,
