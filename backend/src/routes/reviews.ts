@@ -22,9 +22,9 @@ async function extractText(buffer: Buffer, mimetype: string, originalname: strin
   }
   if (ext === "pdf" || mimetype === "application/pdf") {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require("pdf-parse");
-    const pdfParse = (mod.default || mod) as (b: Buffer) => Promise<{ text: string }>;
-    const data = await pdfParse(buffer);
+    const pdfParseLib = await import("pdf-parse");
+    const pdfParse = pdfParseLib.default || pdfParseLib;
+    const data = await (pdfParse as (b: Buffer) => Promise<{ text: string }>)(buffer);
     return data.text;
   }
   if (ext === "docx" || mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
