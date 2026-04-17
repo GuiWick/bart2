@@ -21,11 +21,11 @@ async function extractText(buffer: Buffer, mimetype: string, originalname: strin
     return buffer.toString("utf-8");
   }
   if (ext === "pdf" || mimetype === "application/pdf") {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParseLib = await import("pdf-parse");
-    const pdfParse = (pdfParseLib.default || pdfParseLib) as unknown as (b: Buffer) => Promise<{ text: string }>;
-    const data = await pdfParse(buffer);
-    return data.text;
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new (PDFParse as any)({ data: buffer });
+    const result = await parser.getText();
+    await parser.destroy();
+    return result.text;
   }
   if (ext === "docx" || mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
     const mammoth = await import("mammoth");
